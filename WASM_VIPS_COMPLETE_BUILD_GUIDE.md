@@ -301,6 +301,9 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   [ "$MERGED_COUNT" -ge 26 ] || { echo "ERROR: Merged archive should have >=26 objects, got $MERGED_COUNT"; exit 1; }
   cd ..
   rm -rf merge-tmp
+  # Install Highway library (jpegli dependency)
+  echo "Installing libhwy.a..."
+  cp third_party/highway/libhwy.a $TARGET/lib/ || { echo "ERROR: libhwy.a not found"; exit 1; }
   # Install headers
   echo "Installing jpegli headers..."
   cp lib/include/jpegli/*.h $TARGET/include/
@@ -316,7 +319,7 @@ includedir=\${prefix}/include
 Name: libjpeg
 Description: A JPEG library (jpegli)
 Version: 62.3.0
-Libs: -L\${libdir} -ljpeg
+Libs: -L\${libdir} -ljpeg -lhwy
 Cflags: -I\${includedir}
 PKGEOF
 )

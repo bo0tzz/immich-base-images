@@ -232,6 +232,7 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
     -DBUILD_SHARED_LIBS=FALSE -DJPEGXL_WARNINGS_AS_ERRORS=OFF \
     -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF \
     -DJPEGXL_ENABLE_DEVTOOLS=OFF -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DCMAKE_CXX_FLAGS="$CXXFLAGS -msimd128" -DCMAKE_C_FLAGS="$CFLAGS -msimd128"
   cmake --build _build --target jpegli-static -j$(nproc)
   # Install as libjpeg for compatibility

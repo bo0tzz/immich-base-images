@@ -1,80 +1,85 @@
-# wasm-vips + ImageMagick - Complete Build Guide
+# ImageMagick Integration for wasm-vips
 
-This is a **reference implementation** showing how to add ImageMagick to wasm-vips. It requires wasm-vips base dependencies to be built first.
+This shows how to add ImageMagick support to wasm-vips. **This requires modifying wasm-vips itself** - there's no way around it since wasm-vips build.sh needs to build ImageMagick before libvips.
 
-## Complete Build Process
+## The Actual Solution
 
-### Step 1: Build wasm-vips base dependencies
+Modify `/path/to/wasm-vips/build.sh`:
+
+**1. Add ImageMagick build section** after libraw (~line 473):
 
 ```bash
-cd ~/wasm-vips
+[ -f "$TARGET/lib/pkgconfig/MagickCore.pc" ] || (
+  stage "Compiling ImageMagick"
+  mkdir $DEPS/imagemagick
+  git clone https://github.com/ImageMagick/ImageMagick.git $DEPS/imagemagick
+  cd $DEPS/imagemagick
+  git reset --hard 8289a3388a085ad5ae81aa6812f21554bdfd54f2
+  export ac_cv_lib_jpeg_jpeg_read_header=yes
+  emconfigure ./configure --host=$CHOST --prefix=$TARGET \
+    --enable-static --disable-shared --disable-openmp \
+    --without-threads --without-x --with-magick-plus-plus=no \
+    --with-modules=no CPPFLAGS="$CPPFLAGS -DMAGICK_LIBRAW_VERSION_TAIL=202502"
+  emmake make -j$(nproc)
+  emmake make install-libLTLIBRARIES install-MagickCoreincHEADERS \
+    install-MagickCoreincarchHEADERS install-MagickWandincHEADERS \
+    install-pkgconfigDATA install-configlibDATA
+)
+```
+
+**2. Change libvips section** (~line 535) to use static linking:
+
+```bash
+# Change this line:
+-Dintrospection=disabled ${DISABLE_MODULES:+-Dmodules=disabled} -Darchive=disabled \
+
+# To this:
+-Dintrospection=disabled -Dmodules=disabled -Darchive=disabled \
+```
+
+**3. Run the modified build:**
+
+```bash
+cd /path/to/wasm-vips
 ./build.sh --disable-bindings
 ```
 
-This builds all the image libraries:
-- zlib-ng, libffi, glib, expat, exif, lcms2
-- highway, brotli, jpegli, libjxl (JPEG XL)
-- spng (PNG), imagequant, cgif, webp, tiff
-- libraw, resvg (SVG), aom, libheif (HEIF/AVIF)
-- **libvips** (with dynamic modules)
+Done! Everything builds in one pass.
 
-**Time:** ~10-15 minutes
+## Why This Is The Only Way
 
-### Step 2: Add ImageMagick integration
+wasm-vips build.sh:
+1. Builds 20+ image libraries in dependency order
+2. Builds libvips last (which needs to know about ImageMagick)
 
-```bash
-cd ~/immich-base-images/wasm-vips-reference-scripts
-./build-imagemagick-wasm.sh
-```
+You can't "add on" ImageMagick after because:
+- libvips needs to be built with `-Dmodules=disabled` to include ImageMagick
+- ImageMagick must be built before libvips
 
-This:
-1. Builds ImageMagick 7.1.2-2 (4.6MB + 1.5MB libraries)
-2. Rebuilds libvips with static linking to include ImageMagick
+## The Reference Script (For Testing Only)
 
-**Time:** ~3-5 minutes
+`build-imagemagick-wasm.sh` is provided for testing the ImageMagick build in isolation, but it's inefficient because it:
+1. Assumes you already ran wasm-vips build.sh (which built libvips)
+2. Builds ImageMagick
+3. **Rebuilds libvips** (wasting the first build)
 
-**Final output:** `~/wasm-vips/build/target/lib/libvips.a` (~5MB) with ImageMagick support
-
-## What build-imagemagick-wasm.sh Does
-
-**Assumes already built:**
-- jpegli (JPEG), libjxl (JPEG XL), libheif (HEIF/AVIF)
-- libraw (RAW), libwebp (WebP), libspng (PNG), libtiff (TIFF)
-- All other wasm-vips dependencies from Step 1
-
-**Builds:**
-- ImageMagick 7.1.2-2 libraries (libMagickCore, libMagickWand)
-- libvips with static linking (`-Dmodules=disabled`)
+Use it only if you want to test ImageMagick integration without modifying wasm-vips.
 
 ## Verification
 
+After building:
+
 ```bash
-# Check ImageMagick detection
-grep "magickcore found" ~/wasm-vips/build/deps/vips/_build/meson-logs/meson-log.txt
+# Check detection
+grep "magickcore found" build/deps/vips/_build/meson-logs/meson-log.txt
 
 # Check symbols
-strings ~/wasm-vips/build/target/lib/libvips.a | grep magickload
+strings build/target/lib/libvips.a | grep magickload
 ```
 
-## One-Line Alternative
+## Summary
 
-If you want the absolute simplest approach:
+✅ **For production:** Modify wasm-vips build.sh as shown above
+⚠️ **For testing only:** Use build-imagemagick-wasm.sh (requires wasm-vips already built)
 
-```bash
-cd ~/wasm-vips && ./build.sh --disable-bindings && \
-cd ~/immich-base-images/wasm-vips-reference-scripts && ./build-imagemagick-wasm.sh
-```
-
-## Why Two Steps?
-
-- **Step 1 (wasm-vips build.sh):** Builds 20+ image libraries with complex interdependencies
-- **Step 2 (this script):** Adds ImageMagick, which wasm-vips doesn't include by default
-
-This is a reference showing how to extend wasm-vips builds. For production, you'd integrate the ImageMagick section directly into wasm-vips build.sh (see LIBVIPS_IMAGEMAGICK_WASM_INVESTIGATION.md for integration code).
-
-## Parity with Immich
-
-✅ ImageMagick 7.1.2-2 (revision 8289a3388)
-✅ All image formats: JPEG, JXL, HEIF, WebP, PNG, TIFF, RAW, GIF
-✅ Same dependency chain as Immich server build
-⚠️ Static linking (WASM requirement) vs dynamic (native) - no functional difference
+The real solution is integrating into wasm-vips build.sh. This repo shows exactly what to add.

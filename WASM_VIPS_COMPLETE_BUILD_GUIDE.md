@@ -283,11 +283,17 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   cmake --build _build --target jpegli-static -j$(nproc)
   # Merge libjpeg wrapper and jpegli-static into single archive
   # The wrapper references jpegli symbols, so they must be in one .a file
+  echo "Merging libjpeg.a and libjpegli-static.a..."
   mkdir -p _build/merge-tmp
   cd _build/merge-tmp
-  emar x ../lib/libjpeg.a
-  emar x ../lib/libjpegli-static.a
-  emar rcs $TARGET/lib/libjpeg.a *.o
+  emar x ../lib/libjpeg.a || { echo "Failed to extract libjpeg.a"; exit 1; }
+  emar x ../lib/libjpegli-static.a || { echo "Failed to extract libjpegli-static.a"; exit 1; }
+  OBJ_COUNT=$(ls -1 *.o | wc -l)
+  echo "Extracted $OBJ_COUNT object files"
+  emar rcs $TARGET/lib/libjpeg.a *.o || { echo "Failed to create merged archive"; exit 1; }
+  MERGED_COUNT=$(emar t $TARGET/lib/libjpeg.a | wc -l)
+  echo "Merged archive contains $MERGED_COUNT objects"
+  [ "$MERGED_COUNT" -ge 26 ] || { echo "ERROR: Merged archive should have >=26 objects, got $MERGED_COUNT"; exit 1; }
   cd ../..
   rm -rf _build/merge-tmp
   # Install headers

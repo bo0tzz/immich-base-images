@@ -120,14 +120,154 @@ EOF
 
 ### Patches for libjxl (JPEG XL's JPEG handling)
 
-**Copy Immich's libjxl patches directly:**
+**Create `patches/libjxl/jpegli-empty-dht-marker.patch`:**
 ```bash
-# Download from immich-base-images repository
-curl -Ls https://raw.githubusercontent.com/immich-app/base-images/main/server/sources/libjxl-patches/jpegli-empty-dht-marker.patch \
-  -o patches/libjxl/jpegli-empty-dht-marker.patch
+cat > patches/libjxl/jpegli-empty-dht-marker.patch << 'EOF'
+diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
+index 2621ed08..933210c5 100644
+--- a/lib/jpegli/decode_marker.cc
++++ b/lib/jpegli/decode_marker.cc
+@@ -282,7 +282,7 @@ void ProcessSOS(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+ void ProcessDHT(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+   size_t pos = 2;
+   if (pos == len) {
+-    JPEGLI_ERROR("DHT marker: no Huffman table found");
++    return;
+   }
+   while (pos < len) {
+     JPEG_VERIFY_LEN(1 + kJpegHuffmanMaxBitLength);
+diff --git a/lib/jxl/jpeg/dec_jpeg_data_writer.cc b/lib/jxl/jpeg/dec_jpeg_data_writer.cc
+index 9fb664d3..e055ef9a 100644
+--- a/lib/jxl/jpeg/dec_jpeg_data_writer.cc
++++ b/lib/jxl/jpeg/dec_jpeg_data_writer.cc
+@@ -384,10 +384,12 @@ bool EncodeDHT(const JPEGData& jpg, SerializationState* state) {
+   size_t marker_len = 2;
+   for (size_t i = state->dht_index; i < huffman_code.size(); ++i) {
+     const JPEGHuffmanCode& huff = huffman_code[i];
+-    marker_len += kJpegHuffmanMaxBitLength;
+     for (uint32_t count : huff.counts) {
+       marker_len += count;
+     }
++    // special case: empty DHT marker
++    if (marker_len == 2) break;
++    marker_len += kJpegHuffmanMaxBitLength;
+     if (huff.is_last) break;
+   }
+   state->output_queue.emplace_back(marker_len + 2);
+@@ -405,6 +407,17 @@ bool EncodeDHT(const JPEGData& jpg, SerializationState* state) {
+     const JPEGHuffmanCode& huff = huffman_code[huffman_code_index];
+     size_t index = huff.slot_id;
+     HuffmanCodeTable* huff_table;
++    size_t total_count = 0;
++    size_t max_length = 0;
++    for (size_t i = 0; i < huff.counts.size(); ++i) {
++      if (huff.counts[i] != 0) {
++        max_length = i;
++      }
++      total_count += huff.counts[i];
++    }
++    // Empty DHT marker
++    if (total_count == 0) break;
++
+     if (index & 0x10) {
+       index -= 0x10;
+       huff_table = &state->ac_huff_table[index];
+@@ -417,14 +430,6 @@ bool EncodeDHT(const JPEGData& jpg, SerializationState* state) {
+       return false;
+     }
+     huff_table->initialized = true;
+-    size_t total_count = 0;
+-    size_t max_length = 0;
+-    for (size_t i = 0; i < huff.counts.size(); ++i) {
+-      if (huff.counts[i] != 0) {
+-        max_length = i;
+-      }
+-      total_count += huff.counts[i];
+-    }
+     --total_count;
+     data[pos++] = huff.slot_id;
+     for (size_t i = 1; i <= kJpegHuffmanMaxBitLength; ++i) {
+diff --git a/lib/jxl/jpeg/enc_jpeg_data_reader.cc b/lib/jxl/jpeg/enc_jpeg_data_reader.cc
+index 149bde1c..70ad6a30 100644
+--- a/lib/jxl/jpeg/enc_jpeg_data_reader.cc
++++ b/lib/jxl/jpeg/enc_jpeg_data_reader.cc
+@@ -226,7 +226,12 @@ bool ProcessDHT(const uint8_t* data, const size_t len, JpegReadMode mode,
+   JXL_JPEG_VERIFY_LEN(2);
+   size_t marker_len = ReadUint16(data, pos);
+   if (marker_len == 2) {
+-    return JXL_FAILURE("DHT marker: no Huffman table found");
++    // Empty DHT marker. Useless but does seem to occur in the wild.
++    // We represent this situation with a dummy all-zeroes Huffman table.
++    JPEGHuffmanCode huff;
++    huff.is_last = true;
++    jpg->huffman_code.push_back(huff);
++    return true;
+   }
+   while (*pos < start_pos + marker_len) {
+     JXL_JPEG_VERIFY_LEN(1 + kJpegHuffmanMaxBitLength);
+diff --git a/lib/jxl/jpeg/jpeg_data.cc b/lib/jxl/jpeg/jpeg_data.cc
+index f3144dd6..1ae50a77 100644
+--- a/lib/jxl/jpeg/jpeg_data.cc
++++ b/lib/jxl/jpeg/jpeg_data.cc
+@@ -228,9 +228,10 @@ Status JPEGData::VisitFields(Visitor* visitor) {
+                                        Bits(8), 0, &hc.counts[i]));
+       num_symbols += hc.counts[i];
+     }
+-    if (num_symbols < 1) {
++    if (num_symbols == 0) {
+       // Actually, at least 2 symbols are required, since one of them is EOI.
+-      return JXL_FAILURE("Empty Huffman table");
++      // This case is used to represent an empty DHT marker.
++      continue;
+     }
+     if (num_symbols > hc.values.size()) {
+       return JXL_FAILURE("Huffman code too large (%" PRIuS ")", num_symbols);
+EOF
+```
 
-curl -Ls https://raw.githubusercontent.com/immich-app/base-images/main/server/sources/libjxl-patches/jpegli-icc-warning.patch \
-  -o patches/libjxl/jpegli-icc-warning.patch
+**Create `patches/libjxl/jpegli-icc-warning.patch`:**
+```bash
+cat > patches/libjxl/jpegli-icc-warning.patch << 'EOF'
+diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
+index 2621ed08..33cbb8be 100644
+--- a/lib/jpegli/decode_marker.cc
++++ b/lib/jpegli/decode_marker.cc
+@@ -408,24 +408,29 @@ void ProcessAPP(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+       payload += sizeof(kIccProfileTag);
+       payload_size -= sizeof(kIccProfileTag);
+       if (payload_size < 2) {
+-        JPEGLI_ERROR("ICC chunk is too small.");
++        JPEGLI_WARN("ICC chunk is too small.");
++        return;
+       }
+       uint8_t index = payload[0];
+       uint8_t total = payload[1];
+       ++m->icc_index_;
+       if (m->icc_index_ != index) {
+-        JPEGLI_ERROR("Invalid ICC chunk order.");
++        JPEGLI_WARN("Invalid ICC chunk order.");
++        return;
+       }
+       if (total == 0) {
+-        JPEGLI_ERROR("Invalid ICC chunk total.");
++        JPEGLI_WARN("Invalid ICC chunk total.");
++        return;
+       }
+       if (m->icc_total_ == 0) {
+         m->icc_total_ = total;
+       } else if (m->icc_total_ != total) {
+-        JPEGLI_ERROR("Invalid ICC chunk total.");
++        JPEGLI_WARN("Invalid ICC chunk total.");
++        return;
+       }
+       if (m->icc_index_ > m->icc_total_) {
+-        JPEGLI_ERROR("Invalid ICC chunk index.");
++        JPEGLI_WARN("Invalid ICC chunk index.");
++        return;
+       }
+       m->icc_profile_.insert(m->icc_profile_.end(), payload + 2,
+                              payload + payload_size);
+EOF
 ```
 
 ## Step 4: Modify build.sh

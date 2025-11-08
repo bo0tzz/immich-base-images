@@ -272,20 +272,25 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   # Apply Immich's jpegli patches for malformed JPEG handling and libjpeg wrapper
   git apply $SOURCE_DIR/patches/jpegli/jpegli-malformed-jpeg.patch
   git apply $SOURCE_DIR/patches/jpegli/jpegli-enable-libjpeg-wrapper.patch
-  emcmake cmake -B_build -S. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TARGET $CMAKE_ARGS \
+  mkdir -p _build
+  cd _build
+  emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TARGET $CMAKE_ARGS \
     -DBUILD_SHARED_LIBS=FALSE -DJPEGXL_WARNINGS_AS_ERRORS=OFF \
     -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF \
     -DJPEGXL_ENABLE_DEVTOOLS=OFF -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF \
     -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=ON \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DCMAKE_CXX_FLAGS="$CXXFLAGS -msimd128" -DCMAKE_C_FLAGS="$CFLAGS -msimd128"
-  cmake --build _build --target jpeg -j$(nproc)
-  cmake --build _build --target jpegli-static -j$(nproc)
+  # Verify headers were generated
+  echo "Checking for jpegli headers..."
+  ls -la lib/include/jpegli/ || { echo "ERROR: Headers not generated"; exit 1; }
+  cmake --build . --target jpeg -j$(nproc)
+  cmake --build . --target jpegli-static -j$(nproc)
   # Merge libjpeg wrapper and jpegli-static into single archive
   # The wrapper references jpegli symbols, so they must be in one .a file
   echo "Merging libjpeg.a and libjpegli-static.a..."
-  mkdir -p _build/merge-tmp
-  cd _build/merge-tmp
+  mkdir -p merge-tmp
+  cd merge-tmp
   emar x ../lib/libjpeg.a || { echo "Failed to extract libjpeg.a"; exit 1; }
   emar x ../lib/libjpegli-static.a || { echo "Failed to extract libjpegli-static.a"; exit 1; }
   OBJ_COUNT=$(ls -1 *.o | wc -l)
@@ -294,22 +299,12 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   MERGED_COUNT=$(emar t $TARGET/lib/libjpeg.a | wc -l)
   echo "Merged archive contains $MERGED_COUNT objects"
   [ "$MERGED_COUNT" -ge 26 ] || { echo "ERROR: Merged archive should have >=26 objects, got $MERGED_COUNT"; exit 1; }
-  cd ../..
-  rm -rf _build/merge-tmp
-  # Install headers - check both possible locations
-  if [ -d "_build/lib/include/jpegli" ]; then
-    echo "Installing headers from _build/lib/include/jpegli"
-    cp _build/lib/include/jpegli/*.h $TARGET/include/
-  elif [ -d "_build/include/jpegli" ]; then
-    echo "Installing headers from _build/include/jpegli"
-    cp _build/include/jpegli/*.h $TARGET/include/
-  else
-    echo "ERROR: Cannot find jpegli headers"
-    echo "Searched: _build/lib/include/jpegli and _build/include/jpegli"
-    echo "Available jpeglib.h locations:"
-    find _build -name "jpeglib.h" 2>/dev/null || echo "No jpeglib.h found"
-    exit 1
-  fi
+  cd ..
+  rm -rf merge-tmp
+  # Install headers
+  echo "Installing jpegli headers..."
+  cp lib/include/jpegli/*.h $TARGET/include/
+  cd ..
   cp third_party/libjpeg-turbo/jerror.h $TARGET/include/
   mkdir -p $TARGET/lib/pkgconfig
   cat > $TARGET/lib/pkgconfig/libjpeg.pc << PKGEOF

@@ -56,36 +56,62 @@ mkdir -p patches/jpegli
 **Create `patches/jpegli/jpegli-empty-dht.patch`:**
 ```bash
 cat > patches/jpegli/jpegli-empty-dht.patch << 'EOF'
-diff --git a/lib/jpegli/decode.cc b/lib/jpegli/decode.cc
-index abc..def 100644
---- a/lib/jpegli/decode.cc
-+++ b/lib/jpegli/decode.cc
-@@ -123,7 +123,7 @@ boolean ReadDHTMarker(j_decompress_ptr cinfo, ScanDecoderState* state) {
+diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
+index original..patched 100644
+--- a/lib/jpegli/decode_marker.cc
++++ b/lib/jpegli/decode_marker.cc
+@@ -285,7 +285,7 @@ void ProcessDHT(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+   size_t pos = 2;
+   if (pos == len) {
+-    JPEGLI_ERROR("DHT marker: no Huffman table found");
++    return;
    }
-   if (len != 2) {
-     JPEGLI_ERROR("DHT: invalid marker length %d", len);
--    return FALSE;
-+    return TRUE;
-   }
-   return TRUE;
- }
+   while (pos < len) {
+     JPEG_VERIFY_LEN(1 + kJpegHuffmanMaxBitLength);
 EOF
 ```
 
 **Create `patches/jpegli/jpegli-icc-warning.patch`:**
 ```bash
 cat > patches/jpegli/jpegli-icc-warning.patch << 'EOF'
-diff --git a/lib/jpegli/decode.cc b/lib/jpegli/decode.cc
-index abc..def 100644
---- a/lib/jpegli/decode.cc
-+++ b/lib/jpegli/decode.cc
-@@ -234,7 +234,7 @@ void ProcessICCMarker(j_decompress_ptr cinfo) {
-     if (chunk->next == nullptr || chunk->next->data == nullptr) {
--      JPEGLI_ERROR("Incomplete ICC profile data");
-+      JPEGLI_WARN("Incomplete ICC profile data");
-     }
-   }
- }
+diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
+index original..patched 100644
+--- a/lib/jpegli/decode_marker.cc
++++ b/lib/jpegli/decode_marker.cc
+@@ -411,19 +411,24 @@ void ProcessAPP(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+       payload += sizeof(kIccProfileTag);
+       payload_size -= sizeof(kIccProfileTag);
+       if (payload_size < 2) {
+-        JPEGLI_ERROR("ICC chunk is too small.");
++        JPEGLI_WARN("ICC chunk is too small.");
++        return;
+       }
+       uint8_t index = payload[0];
+       uint8_t total = payload[1];
+       ++m->icc_index_;
+       if (m->icc_index_ != index) {
+-        JPEGLI_ERROR("Invalid ICC chunk order.");
++        JPEGLI_WARN("Invalid ICC chunk order.");
++        return;
+       }
+       if (total == 0) {
+-        JPEGLI_ERROR("Invalid ICC chunk total.");
++        JPEGLI_WARN("Invalid ICC chunk total.");
++        return;
+       }
+       if (m->icc_total_ == 0) {
+         m->icc_total_ = total;
+       } else if (m->icc_total_ != total) {
+-        JPEGLI_ERROR("Invalid ICC chunk total.");
++        JPEGLI_WARN("Invalid ICC chunk total.");
++        return;
+       }
+       if (m->icc_index_ > m->icc_total_) {
+-        JPEGLI_ERROR("Invalid ICC chunk index.");
++        JPEGLI_WARN("Invalid ICC chunk index.");
++        return;
+       }
+       m->icc_profile_.insert(m->icc_profile_.end(), payload + 2,
 EOF
 ```
 

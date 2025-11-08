@@ -283,13 +283,13 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   cmake --build _build --target jpegli-static -j$(nproc)
   # Merge libjpeg wrapper and jpegli-static into single archive
   # The wrapper references jpegli symbols, so they must be in one .a file
-  mkdir -p /tmp/jpegli-merge
-  cd /tmp/jpegli-merge
-  emar x $DEPS/jpeg/_build/lib/libjpeg.a
-  emar x $DEPS/jpeg/_build/lib/libjpegli-static.a
+  mkdir -p _build/merge-tmp
+  cd _build/merge-tmp
+  emar x ../lib/libjpeg.a
+  emar x ../lib/libjpegli-static.a
   emar rcs $TARGET/lib/libjpeg.a *.o
-  cd $DEPS/jpeg
-  rm -rf /tmp/jpegli-merge
+  cd ../..
+  rm -rf _build/merge-tmp
   # Install headers
   cp _build/lib/include/jpegli/*.h $TARGET/include/
   cp third_party/libjpeg-turbo/jerror.h $TARGET/include/

@@ -120,22 +120,12 @@ EOF
 
 ### Patches for libjxl (JPEG XL's JPEG handling)
 
-**Create `patches/libjxl/jpegli-empty-dht-marker.patch`:**
+**Create `patches/libjxl/jxl-empty-dht-marker.patch`:**
+
+This patch only includes the `lib/jxl/jpeg/*` portions (libjxl is built with `-DJPEGXL_ENABLE_JPEGLI=FALSE`, so it won't have `lib/jpegli` files):
+
 ```bash
-cat > patches/libjxl/jpegli-empty-dht-marker.patch << 'EOF'
-diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
-index 2621ed08..933210c5 100644
---- a/lib/jpegli/decode_marker.cc
-+++ b/lib/jpegli/decode_marker.cc
-@@ -282,7 +282,7 @@ void ProcessSOS(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
- void ProcessDHT(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
-   size_t pos = 2;
-   if (pos == len) {
--    JPEGLI_ERROR("DHT marker: no Huffman table found");
-+    return;
-   }
-   while (pos < len) {
-     JPEG_VERIFY_LEN(1 + kJpegHuffmanMaxBitLength);
+cat > patches/libjxl/jxl-empty-dht-marker.patch << 'EOF'
 diff --git a/lib/jxl/jpeg/dec_jpeg_data_writer.cc b/lib/jxl/jpeg/dec_jpeg_data_writer.cc
 index 9fb664d3..e055ef9a 100644
 --- a/lib/jxl/jpeg/dec_jpeg_data_writer.cc
@@ -225,50 +215,7 @@ index f3144dd6..1ae50a77 100644
 EOF
 ```
 
-**Create `patches/libjxl/jpegli-icc-warning.patch`:**
-```bash
-cat > patches/libjxl/jpegli-icc-warning.patch << 'EOF'
-diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
-index 2621ed08..33cbb8be 100644
---- a/lib/jpegli/decode_marker.cc
-+++ b/lib/jpegli/decode_marker.cc
-@@ -408,24 +408,29 @@ void ProcessAPP(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
-       payload += sizeof(kIccProfileTag);
-       payload_size -= sizeof(kIccProfileTag);
-       if (payload_size < 2) {
--        JPEGLI_ERROR("ICC chunk is too small.");
-+        JPEGLI_WARN("ICC chunk is too small.");
-+        return;
-       }
-       uint8_t index = payload[0];
-       uint8_t total = payload[1];
-       ++m->icc_index_;
-       if (m->icc_index_ != index) {
--        JPEGLI_ERROR("Invalid ICC chunk order.");
-+        JPEGLI_WARN("Invalid ICC chunk order.");
-+        return;
-       }
-       if (total == 0) {
--        JPEGLI_ERROR("Invalid ICC chunk total.");
-+        JPEGLI_WARN("Invalid ICC chunk total.");
-+        return;
-       }
-       if (m->icc_total_ == 0) {
-         m->icc_total_ = total;
-       } else if (m->icc_total_ != total) {
--        JPEGLI_ERROR("Invalid ICC chunk total.");
-+        JPEGLI_WARN("Invalid ICC chunk total.");
-+        return;
-       }
-       if (m->icc_index_ > m->icc_total_) {
--        JPEGLI_ERROR("Invalid ICC chunk index.");
-+        JPEGLI_WARN("Invalid ICC chunk index.");
-+        return;
-       }
-       m->icc_profile_.insert(m->icc_profile_.end(), payload + 2,
-                              payload + payload_size);
-EOF
-```
+**Note:** The ICC warning patch from Immich only affects `lib/jpegli` files, which don't exist when building libjxl with `-DJPEGXL_ENABLE_JPEGLI=FALSE`. The jpegli ICC handling is already covered by the google/jpegli patches above.
 
 ## Step 4: Modify build.sh
 
@@ -323,9 +270,8 @@ Find the libjxl section (around line 352). **Replace** it with:
   stage "Compiling jxl"
   git clone --depth 1 --branch v$VERSION_JXL --recursive https://github.com/libjxl/libjxl.git $DEPS/jxl
   cd $DEPS/jxl
-  # Apply Immich's patches for JPEG XL's JPEG handling
-  git apply $SOURCE_DIR/patches/libjxl/jpegli-empty-dht-marker.patch
-  git apply $SOURCE_DIR/patches/libjxl/jpegli-icc-warning.patch
+  # Apply Immich's patch for JPEG XL's JPEG handling (lib/jxl/jpeg/* only)
+  git apply $SOURCE_DIR/patches/libjxl/jxl-empty-dht-marker.patch
   emcmake cmake -B_build -S. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TARGET $CMAKE_ARGS -DCMAKE_FIND_ROOT_PATH=$TARGET \
     -DBUILD_SHARED_LIBS=FALSE -DBUILD_TESTING=FALSE -DJPEGXL_ENABLE_TOOLS=FALSE \
     -DJPEGXL_ENABLE_JPEGLI=FALSE \
@@ -342,9 +288,9 @@ Find the libjxl section (around line 352). **Replace** it with:
 ```
 
 **Key changes:**
-- Clone with `--recursive` to get submodules needed for patches
-- Apply Immich's libjxl patches
-- Keep `-DJPEGXL_ENABLE_JPEGLI=FALSE` (uses google/jpegli instead)
+- Clone with `--recursive` to get submodules needed for patch
+- Apply Immich's JPEG XL JPEG handling patch (lib/jxl/jpeg/* only, no lib/jpegli changes)
+- Keep `-DJPEGXL_ENABLE_JPEGLI=FALSE` (uses google/jpegli as external dependency instead)
 
 ### Change 3: Add libraw
 
@@ -473,11 +419,11 @@ git apply --check ~/wasm-vips/patches/jpegli/jpegli-empty-dht.patch
 # If fails, check google/jpegli hasn't changed
 ```
 
-**libjxl patches fail:**
+**libjxl patch fails:**
 ```bash
 cd build/deps/jxl
-git apply --check ~/wasm-vips/patches/libjxl/jpegli-empty-dht-marker.patch
-# Patches require --recursive clone for submodules
+git apply --check ~/wasm-vips/patches/libjxl/jxl-empty-dht-marker.patch
+# Patch requires --recursive clone for submodules
 ```
 
 **libraw configure fails:**
@@ -498,6 +444,6 @@ You now have wasm-vips with **complete Immich parity**:
 - Same versions (exact revision matches)
 - Only difference: static linking (WASM platform requirement)
 
-**Total changes:** 5 modifications to build.sh + 4 patch files = Complete parity
+**Total changes:** 5 modifications to build.sh + 3 patch files = Complete parity
 
 **Output:** `~/wasm-vips/build/target/lib/libvips.a` (~5-6MB) ready for WASM projects

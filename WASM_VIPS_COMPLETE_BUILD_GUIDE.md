@@ -59,7 +59,7 @@ mkdir -p patches/jpegli patches/libjxl
 ```bash
 cat > patches/jpegli/jpegli-empty-dht.patch << 'EOF'
 diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
-index original..patched 100644
+index 2621ed08..933210c5 100644
 --- a/lib/jpegli/decode_marker.cc
 +++ b/lib/jpegli/decode_marker.cc
 @@ -285,7 +285,7 @@ void ProcessDHT(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
@@ -77,7 +77,7 @@ EOF
 ```bash
 cat > patches/jpegli/jpegli-icc-warning.patch << 'EOF'
 diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
-index original..patched 100644
+index 2621ed08..33cbb8be 100644
 --- a/lib/jpegli/decode_marker.cc
 +++ b/lib/jpegli/decode_marker.cc
 @@ -411,19 +411,24 @@ void ProcessAPP(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {

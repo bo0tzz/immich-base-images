@@ -112,6 +112,7 @@ index original..patched 100644
 +        return;
        }
        m->icc_profile_.insert(m->icc_profile_.end(), payload + 2,
+                              payload + payload_size);
 EOF
 ```
 

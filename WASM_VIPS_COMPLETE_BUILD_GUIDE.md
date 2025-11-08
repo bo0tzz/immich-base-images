@@ -281,9 +281,16 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
     -DCMAKE_CXX_FLAGS="$CXXFLAGS -msimd128" -DCMAKE_C_FLAGS="$CFLAGS -msimd128"
   cmake --build _build --target jpeg -j$(nproc)
   cmake --build _build --target jpegli-static -j$(nproc)
-  # Install jpegli libraries and headers
-  cp _build/lib/libjpeg.a $TARGET/lib/
-  cp _build/lib/libjpegli-static.a $TARGET/lib/
+  # Merge libjpeg wrapper and jpegli-static into single archive
+  # The wrapper references jpegli symbols, so they must be in one .a file
+  mkdir -p /tmp/jpegli-merge
+  cd /tmp/jpegli-merge
+  emar x $DEPS/jpeg/_build/lib/libjpeg.a
+  emar x $DEPS/jpeg/_build/lib/libjpegli-static.a
+  emar rcs $TARGET/lib/libjpeg.a *.o
+  cd $DEPS/jpeg
+  rm -rf /tmp/jpegli-merge
+  # Install headers
   cp _build/lib/include/jpegli/*.h $TARGET/include/
   cp third_party/libjpeg-turbo/jerror.h $TARGET/include/
   mkdir -p $TARGET/lib/pkgconfig

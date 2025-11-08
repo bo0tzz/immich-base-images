@@ -112,6 +112,49 @@ index 171942b3..0bf47e5e 100644
 EOF
 ```
 
+**Create `patches/jpegli/jpegli-enable-libjpeg-wrapper.patch`:**
+
+This patch enables the libjpeg compatibility wrapper for EMSCRIPTEN and fixes incompatible linker flags:
+
+```bash
+cat > patches/jpegli/jpegli-enable-libjpeg-wrapper.patch << 'EOF'
+diff --git a/lib/jpegli.cmake b/lib/jpegli.cmake
+index 0d934b8e..f9e4a2c8 100644
+--- a/lib/jpegli.cmake
++++ b/lib/jpegli.cmake
+@@ -106,7 +106,7 @@ endif()  # JPEGXL_ENABLE_JPEGLI
+ # Build libjpeg.so that links to libjpeg-static
+ #
+
+-if (JPEGXL_ENABLE_JPEGLI_LIBJPEG AND NOT APPLE AND NOT WIN32 AND NOT EMSCRIPTEN)
++if (JPEGXL_ENABLE_JPEGLI_LIBJPEG AND NOT APPLE AND NOT WIN32)
+ add_library(jpegli-libjpeg-obj OBJECT "${JPEGXL_INTERNAL_JPEGLI_WRAPPER_SOURCES}")
+ target_compile_options(jpegli-libjpeg-obj PRIVATE ${JPEGXL_INTERNAL_FLAGS})
+ target_compile_options(jpegli-libjpeg-obj PUBLIC ${JPEGXL_COVERAGE_FLAGS})
+@@ -121,7 +121,7 @@ target_compile_definitions(jpegli-libjpeg-obj PUBLIC
+ set(JPEGLI_LIBJPEG_INTERNAL_OBJECTS $<TARGET_OBJECTS:jpegli-libjpeg-obj>)
+
+ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/jpegli)
+-add_library(jpeg SHARED ${JPEGLI_LIBJPEG_INTERNAL_OBJECTS})
++add_library(jpeg STATIC ${JPEGLI_LIBJPEG_INTERNAL_OBJECTS})
+ target_link_libraries(jpeg PUBLIC ${JPEGXL_COVERAGE_FLAGS})
+ target_link_libraries(jpeg PRIVATE jpegli-static)
+ set_target_properties(jpeg PROPERTIES
+@@ -133,9 +133,11 @@ set_target_properties(jpeg PROPERTIES
+
+ # Add a jpeg.version file as a version script to tag symbols with the
+ # appropriate version number.
++if (NOT EMSCRIPTEN)
+ set_target_properties(jpeg PROPERTIES
+   LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/jpegli/jpeg.version.${JPEGLI_LIBJPEG_LIBRARY_SOVERSION})
+ set_property(TARGET jpeg APPEND_STRING PROPERTY
+   LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/jpegli/jpeg.version.${JPEGLI_LIBJPEG_LIBRARY_SOVERSION}")
++endif()
+
+ if (JPEGXL_INSTALL_JPEGLI_LIBJPEG)
+EOF
+```
+
 ### Patches for libjxl (JPEG XL's JPEG handling)
 
 **Create `patches/libjxl/jxl-empty-dht-marker.patch`:**
@@ -226,17 +269,21 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   cd $DEPS/jpeg
   git reset --hard bc19ca23
   git submodule update --init --recursive
-  # Apply Immich's jpegli patch for malformed JPEG handling
+  # Apply Immich's jpegli patches for malformed JPEG handling and libjpeg wrapper
   git apply $SOURCE_DIR/patches/jpegli/jpegli-malformed-jpeg.patch
+  git apply $SOURCE_DIR/patches/jpegli/jpegli-enable-libjpeg-wrapper.patch
   emcmake cmake -B_build -S. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TARGET $CMAKE_ARGS \
     -DBUILD_SHARED_LIBS=FALSE -DJPEGXL_WARNINGS_AS_ERRORS=OFF \
     -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF \
     -DJPEGXL_ENABLE_DEVTOOLS=OFF -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF \
+    -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=ON \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DCMAKE_CXX_FLAGS="$CXXFLAGS -msimd128" -DCMAKE_C_FLAGS="$CFLAGS -msimd128"
+  cmake --build _build --target jpeg -j$(nproc)
   cmake --build _build --target jpegli-static -j$(nproc)
-  # Install as libjpeg for compatibility
-  cp _build/lib/libjpegli-static.a $TARGET/lib/libjpeg.a
+  # Install jpegli libraries and headers
+  cp _build/lib/libjpeg.a $TARGET/lib/
+  cp _build/lib/libjpegli-static.a $TARGET/lib/
   cp _build/lib/include/jpegli/*.h $TARGET/include/
   cp third_party/libjpeg-turbo/jerror.h $TARGET/include/
   mkdir -p $TARGET/lib/pkgconfig
@@ -438,6 +485,11 @@ You now have wasm-vips with **complete Immich parity**:
 - Same versions (exact revision matches)
 - Only difference: static linking (WASM platform requirement)
 
-**Total changes:** 5 modifications to build.sh + 2 patch files = Complete parity
+**Total changes:** 5 modifications to build.sh + 3 patch files = Complete parity
+
+**Patch files:**
+1. `patches/jpegli/jpegli-malformed-jpeg.patch` - Handles malformed JPEG files
+2. `patches/jpegli/jpegli-enable-libjpeg-wrapper.patch` - Enables libjpeg API compatibility for ImageMagick
+3. `patches/libjxl/jxl-empty-dht-marker.patch` - Handles malformed JPEG XL files
 
 **Output:** `~/wasm-vips/build/target/lib/libvips.a` (~5-6MB) ready for WASM projects

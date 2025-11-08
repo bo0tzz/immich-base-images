@@ -119,10 +119,10 @@ This patch enables the libjpeg compatibility wrapper for EMSCRIPTEN and fixes in
 ```bash
 cat > patches/jpegli/jpegli-enable-libjpeg-wrapper.patch << 'EOF'
 diff --git a/lib/jpegli.cmake b/lib/jpegli.cmake
-index 0d934b8e..f9e4a2c8 100644
+index e6993c7f..29d09456 100644
 --- a/lib/jpegli.cmake
 +++ b/lib/jpegli.cmake
-@@ -106,7 +106,7 @@ endif()  # JPEGXL_ENABLE_JPEGLI
+@@ -106,7 +106,7 @@ endif()
  # Build libjpeg.so that links to libjpeg-static
  #
 

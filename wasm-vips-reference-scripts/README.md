@@ -22,7 +22,7 @@ The code snippets below are what you add to wasm-vips/build.sh. See complete gui
 
 ### ImageMagick Build Section
 
-Add after libraw (~line 473):
+Add after libraw section (ends ~line 473), before resvg section (starts ~line 475):
 
 ```bash
 [ -f "$TARGET/lib/pkgconfig/MagickCore.pc" ] || (

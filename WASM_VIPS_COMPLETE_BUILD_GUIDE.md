@@ -50,9 +50,9 @@ cd wasm-vips
 
 You need to make **2 changes** to `build.sh`:
 
-### Change 1: Add ImageMagick Build (after libraw, ~line 473)
+### Change 1: Add ImageMagick Build (after libraw, before resvg)
 
-Open `build.sh` and find the libraw section (ends around line 473). After it, add:
+Open `build.sh` and find the libraw section (ends around line 473) and the resvg section (starts around line 475). Between them, add:
 
 ```bash
 [ -f "$TARGET/lib/pkgconfig/MagickCore.pc" ] || (

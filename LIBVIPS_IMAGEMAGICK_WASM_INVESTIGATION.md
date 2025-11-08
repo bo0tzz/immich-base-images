@@ -94,7 +94,7 @@ emmake make install-libLTLIBRARIES install-*HEADERS install-pkgconfigDATA
 
 ## Integration into wasm-vips
 
-Add to `build.sh` after libraw (~line 473):
+Add to `build.sh` after libraw section (ends ~line 473), before resvg section (starts ~line 475):
 
 ```bash
 [ -f "$TARGET/lib/pkgconfig/MagickCore.pc" ] || (

@@ -55,14 +55,18 @@ mkdir -p patches/jpegli patches/libjxl
 
 ### Patches for google/jpegli (JPEG codec)
 
-**Create `patches/jpegli/jpegli-empty-dht.patch`:**
+**Create `patches/jpegli/jpegli-malformed-jpeg.patch`:**
+
+This single unified patch handles both empty DHT markers and malformed ICC chunks:
+
 ```bash
-cat > patches/jpegli/jpegli-empty-dht.patch << 'EOF'
+cat > patches/jpegli/jpegli-malformed-jpeg.patch << 'EOF'
 diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
-index 2621ed08..933210c5 100644
+index 171942b3..0bf47e5e 100644
 --- a/lib/jpegli/decode_marker.cc
 +++ b/lib/jpegli/decode_marker.cc
-@@ -285,7 +285,7 @@ void ProcessDHT(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+@@ -285,7 +285,7 @@ void ProcessSOS(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+ void ProcessDHT(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
    size_t pos = 2;
    if (pos == len) {
 -    JPEGLI_ERROR("DHT marker: no Huffman table found");
@@ -70,17 +74,7 @@ index 2621ed08..933210c5 100644
    }
    while (pos < len) {
      JPEG_VERIFY_LEN(1 + kJpegHuffmanMaxBitLength);
-EOF
-```
-
-**Create `patches/jpegli/jpegli-icc-warning.patch`:**
-```bash
-cat > patches/jpegli/jpegli-icc-warning.patch << 'EOF'
-diff --git a/lib/jpegli/decode_marker.cc b/lib/jpegli/decode_marker.cc
-index 2621ed08..33cbb8be 100644
---- a/lib/jpegli/decode_marker.cc
-+++ b/lib/jpegli/decode_marker.cc
-@@ -411,19 +411,24 @@ void ProcessAPP(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
+@@ -411,24 +411,29 @@ void ProcessAPP(j_decompress_ptr cinfo, const uint8_t* data, size_t len) {
        payload += sizeof(kIccProfileTag);
        payload_size -= sizeof(kIccProfileTag);
        if (payload_size < 2) {
@@ -232,9 +226,8 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   cd $DEPS/jpeg
   git reset --hard bc19ca23
   git submodule update --init --recursive
-  # Apply Immich's jpegli patches
-  git apply $SOURCE_DIR/patches/jpegli/jpegli-empty-dht.patch
-  git apply $SOURCE_DIR/patches/jpegli/jpegli-icc-warning.patch
+  # Apply Immich's jpegli patch for malformed JPEG handling
+  git apply $SOURCE_DIR/patches/jpegli/jpegli-malformed-jpeg.patch
   emcmake cmake -B_build -S. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TARGET $CMAKE_ARGS \
     -DBUILD_SHARED_LIBS=FALSE -DJPEGXL_WARNINGS_AS_ERRORS=OFF \
     -DJPEGXL_ENABLE_TOOLS=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF \
@@ -412,11 +405,11 @@ strings build/target/lib/libjpeg.a | grep -i jpegli | head -3
 
 ## Troubleshooting
 
-**jpegli patches fail:**
+**jpegli patch fails:**
 ```bash
 cd build/deps/jpeg
-git apply --check ~/wasm-vips/patches/jpegli/jpegli-empty-dht.patch
-# If fails, check google/jpegli hasn't changed
+git apply --check ~/wasm-vips/patches/jpegli/jpegli-malformed-jpeg.patch
+# If fails, check google/jpegli hasn't changed since bc19ca23
 ```
 
 **libjxl patch fails:**
@@ -444,6 +437,6 @@ You now have wasm-vips with **complete Immich parity**:
 - Same versions (exact revision matches)
 - Only difference: static linking (WASM platform requirement)
 
-**Total changes:** 5 modifications to build.sh + 3 patch files = Complete parity
+**Total changes:** 5 modifications to build.sh + 2 patch files = Complete parity
 
 **Output:** `~/wasm-vips/build/target/lib/libvips.a` (~5-6MB) ready for WASM projects

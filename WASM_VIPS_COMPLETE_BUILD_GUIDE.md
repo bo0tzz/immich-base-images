@@ -296,8 +296,20 @@ Find the mozjpeg section (around line 338-350). **Replace** it with:
   [ "$MERGED_COUNT" -ge 26 ] || { echo "ERROR: Merged archive should have >=26 objects, got $MERGED_COUNT"; exit 1; }
   cd ../..
   rm -rf _build/merge-tmp
-  # Install headers
-  cp _build/lib/include/jpegli/*.h $TARGET/include/
+  # Install headers - check both possible locations
+  if [ -d "_build/lib/include/jpegli" ]; then
+    echo "Installing headers from _build/lib/include/jpegli"
+    cp _build/lib/include/jpegli/*.h $TARGET/include/
+  elif [ -d "_build/include/jpegli" ]; then
+    echo "Installing headers from _build/include/jpegli"
+    cp _build/include/jpegli/*.h $TARGET/include/
+  else
+    echo "ERROR: Cannot find jpegli headers"
+    echo "Searched: _build/lib/include/jpegli and _build/include/jpegli"
+    echo "Available jpeglib.h locations:"
+    find _build -name "jpeglib.h" 2>/dev/null || echo "No jpeglib.h found"
+    exit 1
+  fi
   cp third_party/libjpeg-turbo/jerror.h $TARGET/include/
   mkdir -p $TARGET/lib/pkgconfig
   cat > $TARGET/lib/pkgconfig/libjpeg.pc << PKGEOF

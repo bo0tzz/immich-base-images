@@ -264,17 +264,17 @@ This patch makes libheif compatible with jpegli by fixing a preprocessor check t
 mkdir -p patches/libheif
 cat > patches/libheif/libheif-jpegli-compat.patch << 'EOF'
 diff --git a/heifio/decoder_jpeg.cc b/heifio/decoder_jpeg.cc
-index 576deb9..2afd618 100644
+index 576deb9..a250f14 100644
 --- a/heifio/decoder_jpeg.cc
 +++ b/heifio/decoder_jpeg.cc
-@@ -40,10 +40,13 @@ extern "C" {
+@@ -40,10 +40,14 @@ extern "C" {
  // Note: these 'undef's are only a workaround for a libjpeg-turbo-v2.0 bug and
  // should be removed again later. Bug has been fixed in libjpeg-turbo-v2.0.1.
  #include <jconfig.h>
--#if defined(LIBJPEG_TURBO_VERSION_NUMBER) && LIBJPEG_TURBO_VERSION_NUMBER == 2000000
-+// Split the check to avoid preprocessor errors with jpegli (which doesn't define numeric version)
-+#if defined(LIBJPEG_TURBO_VERSION_NUMBER)
-+#if LIBJPEG_TURBO_VERSION_NUMBER == 2000000
++// Skip version check when using jpegli (LIBJPEG_TURBO_VERSION_NUMBER is defined but empty)
++// This workaround is only for libjpeg-turbo 2.0.0, not needed for jpegli
++#if 0
+ #if defined(LIBJPEG_TURBO_VERSION_NUMBER) && LIBJPEG_TURBO_VERSION_NUMBER == 2000000
  #undef HAVE_STDDEF_H
  #undef HAVE_STDLIB_H
  #endif
@@ -292,7 +292,7 @@ cd -
 rm -rf /tmp/test-libheif-patch
 ```
 
-**Why this is needed:** jpegli's `jconfig.h` template doesn't set `LIBJPEG_TURBO_VERSION_NUMBER` to a numeric value, which causes preprocessor errors when libheif tries to check if it equals 2000000. Splitting the check into nested `#if` directives avoids evaluating the version comparison when the macro isn't properly defined.
+**Why this is needed:** jpegli's `jconfig.h` defines `LIBJPEG_TURBO_VERSION_NUMBER` but leaves it **empty** (not set to any value). When libheif tries to check `#if LIBJPEG_TURBO_VERSION_NUMBER == 2000000`, the preprocessor sees an empty value being compared to 2000000, which is invalid and causes a compilation error. The workaround code is only needed for libjpeg-turbo 2.0.0 (a bug fixed in 2.0.1), so we disable it entirely with `#if 0` when using jpegli.
 
 **Troubleshooting:** If you get "corrupt patch" errors:
 - The patch MUST have a blank line before `EOF` in the heredoc (line 284 above is blank!)

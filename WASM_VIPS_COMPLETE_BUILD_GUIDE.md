@@ -294,16 +294,6 @@ rm -rf /tmp/test-libheif-patch
 
 **Why this is needed:** jpegli's `jconfig.h` defines `LIBJPEG_TURBO_VERSION_NUMBER` but leaves it **empty** (not set to any value). When libheif tries to check `#if LIBJPEG_TURBO_VERSION_NUMBER == 2000000`, the preprocessor sees an empty value being compared to 2000000, which is invalid and causes a compilation error. The workaround code is only needed for libjpeg-turbo 2.0.0 (a bug fixed in 2.0.1), so we disable it entirely with `#if 0` when using jpegli.
 
-**Troubleshooting:** If you get "corrupt patch" errors:
-- The patch MUST have a blank line before `EOF` in the heredoc (line 284 above is blank!)
-- Git patches require a trailing newline - without the blank line, the patch is malformed
-- Run the verification test above to confirm the patch applies correctly
-
-**Alternative:** Download the verified patch file from this repository:
-```bash
-curl -Ls https://raw.githubusercontent.com/immich-app/base-images/main/patches/libheif/libheif-jpegli-compat.patch -o patches/libheif/libheif-jpegli-compat.patch
-```
-
 ## Step 4: Modify build.sh
 
 You need to make **6 changes** to `build.sh`:
@@ -503,7 +493,7 @@ patch -p1 < $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
 
 ```bash
 source ~/emsdk/emsdk_env.sh
-./build.sh --disable-bindings
+./build.sh
 ```
 
 **Expected output:** Builds all dependencies + ImageMagick + libvips (~15-20 min)

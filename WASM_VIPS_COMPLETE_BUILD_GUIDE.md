@@ -281,18 +281,25 @@ index 576deb9..2afd618 100644
 +#endif
  #include <jpeglib.h>
  }
+
 EOF
 
-# Verify the patch was created correctly (should show 17 lines with +++ on line 4)
-wc -l patches/libheif/libheif-jpegli-compat.patch
-sed -n '4p' patches/libheif/libheif-jpegli-compat.patch | grep -q '+++' && echo "✓ Patch looks good" || echo "ERROR: Patch is malformed, missing +++ line"
+# Verify the patch was created correctly by testing if it applies to libheif
+git clone --depth 1 --branch v1.19.5 https://github.com/strukturag/libheif.git /tmp/test-libheif-patch
+cd /tmp/test-libheif-patch
+git apply --check ../patches/libheif/libheif-jpegli-compat.patch && echo "✓ Patch is valid!" || echo "✗ Patch is CORRUPT - check for missing blank line before EOF"
+cd -
+rm -rf /tmp/test-libheif-patch
 ```
 
 **Why this is needed:** jpegli's `jconfig.h` template doesn't set `LIBJPEG_TURBO_VERSION_NUMBER` to a numeric value, which causes preprocessor errors when libheif tries to check if it equals 2000000. Splitting the check into nested `#if` directives avoids evaluating the version comparison when the macro isn't properly defined.
 
-**Troubleshooting:** If you get "error: git diff header lacks filename information", the patch file is missing the `+++ b/heifio/decoder_jpeg.cc` line. Make sure to copy the entire heredoc exactly as shown above, including that line.
+**Troubleshooting:** If you get "corrupt patch" errors:
+- The patch MUST have a blank line before `EOF` in the heredoc (line 284 above is blank!)
+- Git patches require a trailing newline - without the blank line, the patch is malformed
+- Run the verification test above to confirm the patch applies correctly
 
-**Alternative:** You can copy the verified patch file from this repository:
+**Alternative:** Download the verified patch file from this repository:
 ```bash
 curl -Ls https://raw.githubusercontent.com/immich-app/base-images/main/patches/libheif/libheif-jpegli-compat.patch -o patches/libheif/libheif-jpegli-compat.patch
 ```

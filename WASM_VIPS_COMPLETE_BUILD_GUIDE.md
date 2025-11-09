@@ -254,9 +254,41 @@ EOF
 
 **Note:** The ICC warning patch from Immich only affects `lib/jpegli` files, which don't exist when building libjxl with `-DJPEGXL_ENABLE_JPEGLI=FALSE`. The jpegli ICC handling is already covered by the google/jpegli patches above.
 
+### Patches for libheif (HEIF/AVIF support)
+
+**Create `patches/libheif/libheif-jpegli-compat.patch`:**
+
+This patch makes libheif compatible with jpegli by fixing a preprocessor check that fails when `LIBJPEG_TURBO_VERSION_NUMBER` is not a valid numeric value:
+
+```bash
+mkdir -p patches/libheif
+cat > patches/libheif/libheif-jpegli-compat.patch << 'EOF'
+diff --git a/heifio/decoder_jpeg.cc b/heifio/decoder_jpeg.cc
+index 576deb9..2afd618 100644
+--- a/heifio/decoder_jpeg.cc
++++ b/heifio/decoder_jpeg.cc
+@@ -40,10 +40,13 @@ extern "C" {
+ // Note: these 'undef's are only a workaround for a libjpeg-turbo-v2.0 bug and
+ // should be removed again later. Bug has been fixed in libjpeg-turbo-v2.0.1.
+ #include <jconfig.h>
+-#if defined(LIBJPEG_TURBO_VERSION_NUMBER) && LIBJPEG_TURBO_VERSION_NUMBER == 2000000
++// Split the check to avoid preprocessor errors with jpegli (which doesn't define numeric version)
++#if defined(LIBJPEG_TURBO_VERSION_NUMBER)
++#if LIBJPEG_TURBO_VERSION_NUMBER == 2000000
+ #undef HAVE_STDDEF_H
+ #undef HAVE_STDLIB_H
+ #endif
++#endif
+ #include <jpeglib.h>
+ }
+EOF
+```
+
+**Why this is needed:** jpegli's `jconfig.h` template doesn't set `LIBJPEG_TURBO_VERSION_NUMBER` to a numeric value, which causes preprocessor errors when libheif tries to check if it equals 2000000. Splitting the check into nested `#if` directives avoids evaluating the version comparison when the macro isn't properly defined.
+
 ## Step 4: Modify build.sh
 
-You need to make **5 changes** to `build.sh`:
+You need to make **6 changes** to `build.sh`:
 
 ### Change 1: Replace mozjpeg with google/jpegli
 
@@ -412,6 +444,26 @@ Find the libvips meson setup (around line 495-500):
 -Dintrospection=disabled -Dmodules=disabled -Darchive=disabled \
 ```
 
+### Change 6: Apply libheif jpegli compatibility patch
+
+Find the libheif section (around line 660-680). After the `git clone` or tarball extraction line, **add** the patch application:
+
+```bash
+[ -f "$TARGET/lib/pkgconfig/libheif.pc" ] || (
+  stage "Compiling libheif"
+  # ... existing git clone or download code ...
+  cd $DEPS/heif
+  # Apply jpegli compatibility patch
+  git apply $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
+  # ... rest of cmake build ...
+)
+```
+
+**Note:** If libheif is downloaded as a tarball instead of git clone, use `patch -p1` instead:
+```bash
+patch -p1 < $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
+```
+
 ## Step 5: Run the Build
 
 ```bash
@@ -458,7 +510,7 @@ strings build/target/lib/libjpeg.a | grep -i jpegli | head -3
 ✅ **Immich libjxl patches applied** - JPEG XL's JPEG handling tolerates malformed files
 ✅ **libraw 09bea311** - Exact Immich revision for RAW support
 ✅ **ImageMagick 7.1.2-2** (8289a3388) - Exact Immich version
-✅ **libheif 1.20.2** - HEIF/AVIF support
+✅ **libheif 1.20.2** - HEIF/AVIF support with jpegli compatibility patch
 ✅ **Static linking** - All format handlers in single library
 ✅ **Same build flags** - MAGICK_LIBRAW_VERSION_TAIL=202502
 
@@ -508,11 +560,12 @@ You now have wasm-vips with **complete Immich parity**:
 - Same versions (exact revision matches)
 - Only difference: static linking (WASM platform requirement)
 
-**Total changes:** 5 modifications to build.sh + 3 patch files = Complete parity
+**Total changes:** 6 modifications to build.sh + 4 patch files = Complete parity
 
 **Patch files:**
 1. `patches/jpegli/jpegli-malformed-jpeg.patch` - Handles malformed JPEG files
 2. `patches/jpegli/jpegli-enable-libjpeg-wrapper.patch` - Enables libjpeg API compatibility for ImageMagick
 3. `patches/libjxl/jxl-empty-dht-marker.patch` - Handles malformed JPEG XL files
+4. `patches/libheif/libheif-jpegli-compat.patch` - Fixes jpegli compatibility in libheif
 
 **Output:** `~/wasm-vips/build/target/lib/libvips.a` (~5-6MB) ready for WASM projects

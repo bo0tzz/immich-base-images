@@ -22,22 +22,9 @@ Complete WASM build with all Immich image format support:
 
 - Linux or macOS
 - ~2GB disk space
-- Git, curl, cmake, ninja, autoconf, automake, libtool
-
-## Step 1: Install Emscripten SDK
-
-```bash
-cd ~
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk
-./emsdk install 4.0.19
-./emsdk activate 4.0.19
-source ./emsdk_env.sh
-```
-
-Verify: `emcc --version` should show 4.0.19
-
-## Step 2: Clone wasm-vips
+- Git, curl, docker
+- 
+## Step 1: Clone wasm-vips
 
 ```bash
 cd ~
@@ -45,7 +32,7 @@ git clone https://github.com/kleisauke/wasm-vips.git
 cd wasm-vips
 ```
 
-## Step 3: Create Immich Patch Files
+## Step 2: Create Immich Patch Files
 
 We need patches for both google/jpegli and libjxl:
 
@@ -294,7 +281,7 @@ rm -rf /tmp/test-libheif-patch
 
 **Why this is needed:** jpegli's `jconfig.h` defines `LIBJPEG_TURBO_VERSION_NUMBER` but leaves it **empty** (not set to any value). When libheif tries to check `#if LIBJPEG_TURBO_VERSION_NUMBER == 2000000`, the preprocessor sees an empty value being compared to 2000000, which is invalid and causes a compilation error. The workaround code is only needed for libjpeg-turbo 2.0.0 (a bug fixed in 2.0.1), so we disable it entirely with `#if 0` when using jpegli.
 
-## Step 4: Modify build.sh
+## Step 3: Modify build.sh
 
 You need to make **6 changes** to `build.sh`:
 
@@ -489,16 +476,15 @@ patch -p1 < $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
 )
 ```
 
-## Step 5: Run the Build
+## Step 4: Run the Build
 
 ```bash
-source ~/emsdk/emsdk_env.sh
-./build.sh
+npm run build
 ```
 
 **Expected output:** Builds all dependencies + ImageMagick + libvips (~15-20 min)
 
-## Step 6: Verify Complete Parity
+## Step 5: Verify Complete Parity
 
 **Check all components built:**
 ```bash

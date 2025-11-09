@@ -464,22 +464,39 @@ Find the libvips meson setup (around line 495-500):
 
 ### Change 6: Apply libheif jpegli compatibility patch
 
-Find the libheif section (around line 660-680). After the `git clone` or tarball extraction line, **add** the patch application:
+Find the libheif section (around line 660-680). Look for:
+
+```bash
+cd $DEPS/heif
+# Note: without CMAKE_FIND_ROOT_PATH find_path for AOM is not working...
+emcmake cmake -B_build -S.
+```
+
+**After the `cd $DEPS/heif` line and BEFORE the `emcmake cmake` line, insert:**
+
+```bash
+# Apply jpegli compatibility patch for preprocessor error fix
+patch -p1 < $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
+```
+
+**Complete example:**
 
 ```bash
 [ -f "$TARGET/lib/pkgconfig/libheif.pc" ] || (
   stage "Compiling libheif"
-  # ... existing git clone or download code ...
+  mkdir $DEPS/heif
+  curl -Ls https://github.com/strukturag/libheif/releases/download/v$VERSION_HEIF/libheif-$VERSION_HEIF.tar.gz | tar xzC $DEPS/heif --strip-components=1
   cd $DEPS/heif
-  # Apply jpegli compatibility patch
-  git apply $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
-  # ... rest of cmake build ...
+  # Apply jpegli compatibility patch for preprocessor error fix
+  patch -p1 < $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
+  # Note: without CMAKE_FIND_ROOT_PATH find_path for AOM is not working for some reason
+  emcmake cmake -B_build -S. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TARGET $CMAKE_ARGS -DCMAKE_FIND_ROOT_PATH=$TARGET \
+    -DBUILD_SHARED_LIBS=FALSE -DENABLE_PLUGIN_LOADING=FALSE -DBUILD_TESTING=FALSE \
+    -DWITH_EXAMPLES=FALSE -DWITH_LIBDE265=FALSE -DWITH_X265=FALSE -DWITH_OpenH264_DECODER=FALSE \
+    -DCMAKE_CXX_FLAGS="$CXXFLAGS -D__EMSCRIPTEN_STANDALONE_WASM__" \
+    -DENABLE_MULTITHREADING_SUPPORT=FALSE
+  make -C _build install
 )
-```
-
-**Note:** If libheif is downloaded as a tarball instead of git clone, use `patch -p1` instead:
-```bash
-patch -p1 < $SOURCE_DIR/patches/libheif/libheif-jpegli-compat.patch
 ```
 
 ## Step 5: Run the Build
